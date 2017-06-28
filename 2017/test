@@ -1,0 +1,520 @@
+
+# zfs手册 v0.1.0
+===========================
+	written by hmx
+===========================
+
+## 一、zfs名词解释常用功能
+名词解释：
+
+```
+refreservation:设置为数据集（不包括后代，如快照和克隆）预留的最小磁盘空间量
+```
+```
+sparse volume:by specifying the -s option to the zfs create -V command, or by removing (or changing) the refreservation after the volume  has  been  created.  A "sparse volume" is a volume where the refreservation is unset or less then the volume size. Consequently, writes to a sparse  volume can  fail with ENOSPC when the pool is low on space. For a sparse volume, changes to volsize are not reflected in the reservation.
+```
+
+1.1	创建普通池
+```
+	命令：zpool create poolname /dev/xxx /dev/xxx …….
+	功能：将多个存储介质集合创建一个存储池
+```
+
+1.2	创建raid池
+```
+	命令：zpool create poolname raidz /dev/xxx /dev/xxx ……
+	功能：将多个存储介质集合创建一个raidz存储池
+	raid级别：
+	raid0 eg. zpool create poolname /dev/sda /dev/sdb /dev/sdc ..... 条带
+	raid1 eg. zpool create poolname mirror  /dev/sda /dev/sdb     镜像
+	raid10 eg. zpool create poolname mirror  /dev/sda /dev/sdb  zpool add poolname mirror /dev/sdc /dev/sdd 镜像条带 先做镜像再做条带
+	raid5 eg. zpool create poolname raidz  /dev/sda /dev/sdb /dev/sdc /dev/sdd  最少三块
+ 	raid6 eg. zpool create poolname raidz2 /dev/sda /dev/sdb /dev/sdc /dev/sdd  
+	raidz3 eg. zpool create poolname raidz3 /dev/sda /dev/sdb /dev/sdc /dev/sdd /dev/sendtargets
+	raid50 先做raid5再做条带
+	raid60 先做raid6再做条带
+```
+
+1.3	创建镜像池
+```
+	命令：zpool create poolname mirror /dev/xxx  /dev/xxx …..
+	将多个存储介质集合创建一个镜像存储池
+```
+
+1.4	创建热备设备
+```
+	命令：zpool create poolname  /dev/xxx  /dev/xxx ...  spare /dev/xxx  /dev/xxx..
+	将多个存储介质集合创建一个热备存储池
+	备注：案列1：将一个盘拔出插槽，zfs没有自动巡检功能，需要手动scrub一下，才会检查到磁盘状态变化，此时zpool status才会显示出错误。 而且不会自动替换热备盘。
+		  案列2：先offline 其中一个设备，再手动用热备盘替换。 （总之就是没有找到自动替换的场景）
+```
+
+1.5	创建添加读缓存设备
+```
+	命令：zpool create poolname cache /dev/xxx  /dev/xxx …..
+	将多个存储介质集合创建一个缓存存储池
+```
+
+1.6	创建添加删除写缓存设备
+```
+	命令：zpool create poolname log /dev/xxx  /dev/xxx …..
+	将多个存储介质集合创建一个日志存储池
+	
+	命令：zpool add poolname log /dev/xxx  /dev/xxx …..
+	将多个存储介质集合创建一个日志存储池
+	
+	命令：zpool remove poolname log /dev/xxx  /dev/xxx …..
+	将多个存储介质集合创建一个日志存储池
+	
+```
+
+1.7	创建块设备
+```
+	命令：zfs create –V size –o ashfit=12 zpool/vol
+	参数：size为创建的块设备的大小
+	功能：创建一个块设备
+```
+
+1.8	设置压缩
+```
+	命令：zfs set compression=on poolname
+	功能：存储的内容都将使用压缩算法
+```
+
+1.9	克隆
+```
+	命令：zfs clone snapshot poolname/vol
+	功能：将一个存储池种的数据集在这个存储池中克隆出一个相同的
+```
+
+1.10快照
+```
+	命令：zfs snapshot poolname/vol@`date +%F%T`
+	功能：建立一个快照
+```
+
+1.11快照发送接收
+  ```
+	```
+
+1.12回滚
+```
+	命令：zfs rollback –r poolname/vol@snapshotname
+	功能：将设备上的内容回滚到莫一个快照
+```
+1.13设置缓存
+```
+	命令：
+```
+
+1.14存储池导入
+```
+	命令：zpool import poolname
+	功能：将特定的存储池导入
+```
+
+1.15存储池导出
+```
+	命令：zpool export poolname
+	功能：将特定的存储池导出
+```
+
+1.16设置同步读写
+```
+	命令：
+```
+1.17设置异步读写
+```
+	命令：
+```
+1.18磁盘检测
+```
+	命令：zpool scrub poolname
+	功能：用于验证一个特定的存储池的checksum是否正确。在mirror和raidz存储池中使用此命令会自动修复磁盘。
+```
+
+1.19加密
+```
+  加密方式1：
+  对存储池加密
+	命令：zpool create -o encryption=<> -o keysource=<>  poolname
+	参数解释：encryption=<AES-128-CCM,AES-192-CCM,AES-256-CCM,AES-128-GCM,AES-192-GCM,AES-256-GCM>  encryption=on等于encryption=AES-CCM-256 keysource=<raw | hex | passphrase>,<prompt | file://<absolute file path>> raw<32> hex<32> passphrase<8-64>
+
+
+	加密方式2：
+	>对zvol加密
+	命令：zfs create -o encryption=<> -o keysource=<> -V size poolname/volname
+		参数解释：同上
+	密钥操作：
+		命令：zfs key -l <dataset> 卸载key
+			  zfs key -c <dataset> 装载key
+			  zfs key -u <dataset> 修改key
+	查看加密状态：
+		命令：zfs get encryption
+```
+
+1.20 zpool status cmd 参数
+```
+	参数： $VDEV_PATH Full path to the vdev
+		   $VDEV_UPATH: "Underlying path" to the vdev.  For device mapper, multipath, or partitioned vdevs, VDEV_UPATH is the  actual  underlying  /dev/sd*
+                       disk.  This can be useful if the command you're running requires a /dev/sd* device.
+		   $VDEV_ENC_SYSFS_PATH: The sysfs path to the vdev's enclosure LEDs (if any).
+```
+
+1.21 zpool iostat cmd 参数
+```
+	参数： $VDEV_PATH Full path to the vdev
+		   $VDEV_UPATH: "Underlying path" to the vdev.  For device mapper, multipath, or partitioned vdevs, VDEV_UPATH is the  actual  underlying  /dev/sd*
+                       disk.  This can be useful if the command you're running requires a /dev/sd* device.
+		   $VDEV_ENC_SYSFS_PATH: The sysfs path to the vdev's enclosure LEDs (if any).
+```
+
+1.22 zfs模块参数查看修改
+```
+运行时修改：
+	查看：
+	step1:cd /sys/module/zfs/parameters/
+	step2:grep ".*" *
+	修改：
+	step1：echo 1>/sys/module/zfs/parameters/zfs_prefetch_disable
+	
+永久修改：
+	step1：vim /etc/modprobe.d/zfs.conf
+			options spl spl_kmem_cache_slab_limit=16384
+			options spl spl_kmem_cache_reclaim=0
+	step2：重启
+ ```
+ 
+1.23 zfs删除存储池
+```
+	命令：
+	zpool destroy -f poolname  （当磁盘被占用时，-f参数无用，这个需要解决。现在只有重启可以）
+```
+
+1.24 点亮磁盘灯
+```
+	命令： 
+	# echo 1 > '/sys/class/enclosure/2:0:35:0/Slot 15/locate' 
+	# echo 1 > /sys/class/enclosure/*/*/device/block/sdaa/../../enclosure*/locate
+	# echo 1 > /sys/class/enclosure/1:0:5:0/ArrayDevice20/locate
+```
+
+```
+1.25 取出某一个存储池使用的磁盘组
+```
+	命令：
+	zpool status poolname -c 'echo $VDEV_ENC_SYSFS_PATH' |grep /sys/class/enclosure/ |awk '{print $NF}'|cut -d '/' -f 6
+	zpool status testpool2  -c 'echo $VDEV_ENC_SYSFS_PATH' |grep /sys/class/enclosure/ |awk '{print $2}'  热备盘的状态
+```
+
+1.26 zfs清楚某个磁盘的label
+```
+	命令：
+	zpool clearlabel <dev>
+```
+
+1.27 避免zfs因为拔出硬盘导致的失败
+```
+	命令：
+	zpool set failmode=continue poolname
+```
+
+1.28 启动磁盘修复
+```
+	命令：
+	zpool clear -F poolname
+	强制把一个磁盘拔出来再插入回去，磁盘将不可以被操作
+```
+
+
+## 二、配置
+2.1 开机启动后检查zfs
+```
+	存储池状态：zpool status
+	存储池数据库状态：zdb
+	zfs状态：zfs list
+```
+2.2 存储池丢失后导入方法
+```
+	zpool import -a
+	zpool import -d /dev/disk/by-id poolname
+	zpool import -d /dev poolname （实验中热备盘还是不能变化回来）
+	存储池中设备格式从/dev/sdx 变化为scsi-xxxx的原因为整个设备中/dev/sdx的编号变化了。而此编号由磁盘插入的顺序位置变化
+```
+2.3 zfs开机自动启动设置
+```
+	step1：For zfs to live by its "zero administration" namesake, the zfs daemon must be loaded at startup.
+		   A benefit to this is that it is not necessary to mount the zpool in /etc/fstab; the zfs daemon can import and mount zfs pools automatically.
+		   The daemon mounts the zfs pools reading the file /etc/zfs/zpool.cache.
+		   For each pool you want automatically mounted by the zfs daemon execute:
+	# zpool set cachefile=/etc/zfs/zpool.cache <pool>
+
+	step2：Enable the service so it is automatically started at boot time:
+	# systemctl enable zfs.target
+
+	step3：To manually start the daemon:
+	# systemctl start zfs.target
+
+	step4：If zfs-mount.service fails on boot due to running before the kernel module is loaded, you may have to manually enable the zfs-import-cache.service.
+	# systemctl enable zfs-import-cache.service
+		在启动时自动导入
+	  systemctl enable zfs-import-cache  
+		or the following if you prefer scanning each time instead of using cache  每次扫描？
+	  systemctl enable zfs-import-scan
+```
+2.4 网吧配置虚拟机可以上网也可以和本机通
+```
+	1.配置vmet8（NAT网关）
+	2.配置网卡配置文件，填写DNS1=XXXX,GATEWAY=XXXX 填写的都是自己的网址
+	3.service network restart
+	4.注意复制的虚拟机MAC地址。如果有冲突会有一个上不了
+```
+
+2.4 zfs+IP-SAN测试配置
+```
+	ISCSI软件：LIO+targetcli创建
+	zfs版本：zfs-0.6.5.8 spl-0.6.5.8
+	准备：systemctl enable target | systemctl restart target
+	targetcli创建iscsi步骤：
+	step1：> cd backstores/block 　create bolck_zfs /dev/zd0
+	step2: > /iscsi> create iqn.2016-11.cn.30wish.target:zd0
+	step3: > /iscsi> cd iqn.2016-11.cn.30wish.target:zd0/tpg1/acls create iqn.2016-11.cn.30wish.target
+	step4: > /iscsi/iqn.20...zd0/tpg1/luns> create /backstores/block/block_zfs
+	
+	scst创建步骤：
+	modprobe scst
+	modprobe iscsi-scst
+	modprobe scst_disk
+	modprobe scst_vdisk
+	
+	#iscsi-scstd
+
+	发起器配置步骤：
+	step1：用centos的iscsi时需要修改/etc/iscsi/initialtorname.iscsi 在其中添加名字。 名字需要与在targetcli中建立的acl中的地址一致
+	step2：在配置完成后要将service iscsid restart
+	step3：关闭firewalld systemctl disable firewalld
+	step4：关闭selinux  vi /etc/selinux/config  将其中第一个disabled
+	step5：关闭iscsi  service target stop
+	step6: 重启iscsi  service target start
+
+    发起器命令操作：
+	step1：发现iqn。iscsiadm -m discovery -t sendtargets -p ipaddrxxxxxxxx
+	step2：展示发现的节点iscsiadm -m node -o show
+	step3：登录iscsiadm -m node -T iqn.2016-11.cn.30wish.target:zd0 -p 172.16.102.96 -l
+
+	step4：登出 iscsiadm -m node -u
+```
+2.5 ZFS+DRBD配置使用
+```
+	测试环境：1.虚拟环境：     2.双控环境：
+	DRBD版本：
+	zfs版本：zfs-0.7.0.rc3（） spl-0.7.0rc
+```
+
+```
+2.6 ramdisk
+	输入命令：modprobe brd rd_nr=8 rd_size=4485760 max_part=0
+	注意：在重启后所有配置丢失，ramdisk guid 会重新分配。
+	试验：在有供电设备保持内存时，ramdisk guid如何变化？
+```
+```	
+2.7 显示此控制器所有的块设备名称
+	# echo /sys/class/enclosure/*/*/device/block/* |tr ' ' '\n'
+```
+
+
+2.8 kstat内核统计
+```		
+zfs在spl中实现了kstat
+```
+
+
+2.9 vdev_id.conf
+	可以通过man手册查到vdev_id.conf，同时在zfsonlinux的wiki页面中也有介绍。 后续可以重点看。
+	
+2.10 zed
+	zfsonlinux中有专门介绍zed的README文件。热备盘的自动替换也要用到它，最近重点看，要尽快搞通
+	
+	
+2.11 zpio
+	man zpio 中有zfs dmu层的压力测试
+	
+2.12 zstreamdump可以将zfs发送流显示出来
+## 三、在国产化平台上安装zfs
+
+3.1 测试平台
+```
+    cpu:飞腾1500a
+    操作系统：麒麟操作系统
+    内核版本：kernel 3.14.57
+```
+
+3.2 安装环境
+```
+    软件准备：util-linux  zfs-0.6.5.8 spl-0.6.5.8
+```
+3.3 步骤
+```
+    1.安装util-linux  在configure阶段，输入./configure --disable-all-programs --enable-libuuid --enable-uuidd
+    2.安装spl configure  make make install
+    3.安装zfs configure  make make install
+    4.modprobe zfs
+    5.如果安装不上将/lib/modules/kernelxxx/extra 做软连接到正确的位置
+```
+
+## 四、在Centos平台上安装zfs
+
+4.1 测试平台
+```
+	cpu：i7
+	操作系统：Centos7（1406)(1503)(1511）ps:Centos7版本都测试过
+	内核版本：kernel (3.10.0-123)(3.10.0-229)(3.10.0-327)
+	编译软件：
+			  step1：autoconf automake gcc libtool
+			  step2：zlib-devel  libuuid-devel libblkid-devel libattr-devel
+			  step3：kernel-devel （此时user下才有内核源码树）
+```
+4.2 安装环境
+```
+	软件准备：zfs-0.6.5.8 spl-0.6.5.8 zfs-0.7.0 spl-0.7.0 dkms-2.2.0.3-34.git.9e0394d.el7.noarch.rpm device-mapper-devel-1.02.107-5.el7.x86_64.rpm fio-2.2.8-2.el7.x86_64.rpm
+```
+4.3 步骤
+```
+	方法一：
+	1.解压spl zfs
+	2.安装 dkms-2.2.0.3-34.git.9e0394d.el7.noarch.rpm
+	3.进入spl step1:./configure  step2:make rpm  step3:安装所有x86平台的rpm step4:安装spl-kmod
+	4.进入zfs step1:./configure  step2:make rpm  step4:安装所有x86平台的rpm step4:安装zfs-kmod
+    5.输入dkms status 查看两个模块状态 如果没有install 使用dkms命令编译安装
+	方法二：
+	1.安装util-linux  在configure阶段，输入./configure --disable-all-programs --enable-libuuid --enable-uuidd
+    2.安装spl configure  make make install
+    3.安装zfs configure  make make install
+    4.modprobe zfs
+    5.如果安装不上将/lib/modules/kernelxxx/extra 做软连接到正确的位置
+
+	PS:
+	WARN1:在安装0.7.0版本时，还需要安装device-mapper-devel-1.02.107-5.el7.x86_64.rpm fio-2.2.8-2.el7.x86_64.rpm 两个安装包
+	WARN2:在系统安装阶段，可能会安装不同的软件，如果有报错根据提示安装缺少的安装包。
+	WARN3:使用yum安装时要注意现在所有的安装包都是对应于1511版本
+```
+
+
+## 五、ZFS模块
+```
+5.1 加密模块
+	5.1.1 zfs加密框架
+	5.2.2 添加国密算法
+5.2 测试模块
+	ztest模块
+	功能：用于zfs的单元测试工具
+	使用方法：zfs-tests.sh
+
+
+```
+## 六、zfs双控
+
+6.1 双控环境
+
+```
+测试：国鑫双控 两个控制器连接到相同硬盘 
+结论：1.两个控制器都可以发现池，也都可以控制存储池。 2.任意一个控制器操作存储池时，内容有不同步情况，重新导入内容同步
+测试过程中问题：1.无法卸载的时候，使用 umount -fl /dev/zd0命令
+
+```
+
+```
+## 七、zfs用户空间配置
+位置：/etc/sysconfig/zfs
+7.1 
+
+6.1 双控环境
+
+```
+测试：国鑫双控 两个控制器连接到相同硬盘 
+结论：1.两个控制器都可以发现池，也都可以控制存储池。 2.任意一个控制器操作存储池时，内容有不同步情况，重新导入内容同步
+测试过程中问题：1.无法卸载的时候，使用 umount -fl /dev/zd0命令
+
+```
+
+## 测试
+1.1 测试目的
+```   	 
+	目的一：测试在zfs_on_linux软件环境下zfs的功能和性能
+	目的二：测试在SmartOS下zfs的功能和性能
+	目的三：测试在Ubuntu16.04下系统内核中的zfs，了解zfs在linux下的稳定性
+	目的四：测试在OpenSolaris下zfs最完整的功能。
+	目的五：测试最新版本zfs_on_linux中的加密功能，熟悉其加密框架。
+```
+
+1.2 IOMETER测试调整
+```
+	（1）Maximum Disk Size 设置扇区固定大小
+	（2）of Outstanding I/O 同时发送的IO请求，同时发送的IO请求（聪明人知道这个就是体现NCQ的作用了），预设值是1，一般家用测试不会去修改这个项目的，只有厂家秀分数做广告时会去改成32来跑最大IOPS忽悠用户。
+	（3）Total I/Os Per Second 当前规则下，每秒处理的IOPS数。
+	Total MBs per Second 当前规则下，每秒的传输率。
+	Average I/O Response Time (ms) 当前规则下，平均一次IOPS处理时间。
+	Maximum I/O Response Time (ms) 当前规则下，最大一次IOPS处理时间。
+	%CPU Utilization (total) 当前规则下，CPU占用率
+	Total Error Count 当前测试中，测试出错计数。
+```
+
+1.3 fio+zfs 测试中的问题
+```
+测试环境：设置 fio --direct=1 
+测试结果：1.直接测试zvol情况下：会出现错误提示文件系统不支持directio 2.通过iscsi或者fc将zvol提供给别的系统测试：不会有错误提示，但是会出现磁盘容量变大且无法更改回来的情况
+
+
+direct-io：
+一、各操作系统比较
+1.1 在solaris中块设备在/dev/目录下分为有缓存的块设备和无缓存的块设备，没有设置directio的选项。相当于有缓冲和无缓冲是块设备本身的属性。
+1.2 freebsd同solaris相似。
+1.3 mac也不支持directio设置，但其有打开缓存和关闭缓存的选项。
+
+二、directio来源
+2.1 directio目前没有标准
+2.2 directio是在linux中的xfs文件系统中首先被引入的，目的是绕过linux文件系统的cache，禁止文件系统缓冲，绕过内核缓冲区直接对块设备进行操作。
+
+三、directio与zfs关系与问题
+2.从开发讨论中得出结论，现在的zfsonlinux不支持linux directio接口。
+3.在zfs属性设置中有是否使用缓冲的设置，但主要是是否使用log设备，而使用log设备的目的是为了降低延迟，与文件系统缓冲没有关系。
+
+四、directio机制
+4.1 文件系统受硬件限制，会使用内存做cache，对读写操作进行优化。但引入内存作为cache后会对可靠性产生影响，由此linux引入了directio。需要区别的是directio与同步io不同，同步io还是在内存有镜像的，directio完全抛弃了内存，对性有一定影响
+
+4.2 在linux内核中使用directio 在使用open（）函数打开文件时标志O_DIRECT标志，内核会对命令进行相应的处理
+
+4.3 因为不经过缓冲直接进行读写磁盘，必然会产生堵塞，所以directio与aio（异步io）会同时使用
+
+五、buffer-io
+5.1 
+	读操作：硬盘->内核页缓存->用户缓冲区
+    写操作：用户缓冲区->内核页缓存->硬盘
+```
+
+
+
+
+
+## 参考链接
+```
+	http://list.zfsonlinux.org/pipermail/zfs-discuss/2016-June/025789.html
+	1. it sounds like the default background sync bandwidth which is quite low.
+       I vaguely remember having to adjust it for a setup i did some years back or the sync would take too long.
+	2. resync-rate rate
+       To ensure a smooth operation of the application on top of DRBD, it is possible to limit the bandwidth which may be used by background synchronizations. The default is 250 KB/sec, the default unit is KB/sec. Optional suffixes K, M, G are allowed.
+```
+```	   
+	   DRBD 8.4+ also dynamically adjusts the resync rate.  Here is some good info on that: https://www.drbd.org/en/doc/users-guide-84/s-configure-sync-rate
+	3. We’ve had this setup running for a few years.  Not much specific to drbd+zfs, 		but 	there are a number of performance tweaks for general drbd usage.  Couple things come to mind:
+
+
+		1.       Read their online documentation, it’s very good!
+
+		2.       A dedicated drbd replication link is optional but highly recommended.  Latency of the drbd block device is directly dependent on how long it takes the secondary box to respond back to the primary that it received (and wrote) the data.
+
+		3.       Unless you enjoy pain, do not use drbd in dual-primary mode.  It’s a recipe for trouble.  Instead consider the “read-balancing” resource option.
+
+		4.       Our config has some hard-coded settings for replication.  Newer drbd versions will auto-tune to some extent, but you can give it “hints”.  YMMV.I would suggest one significant tweak if you envision using the underlying zvol without the drbd layer.  (For example, if you snaphot the zvol and “zfs send” it to a third machine offsite?)  Use a separate zvol for drbd metadata.  This makes the underlying zvol block device the same size as the drbd block device.  Even with the size difference, it will work.  But you’ll get spurious errors in various logs about size mismatch between the partition table and actual device size.  Bonus points, since the drbd metadata has no meaning or use outside the bounds of a particular drbd instance you are saving some snapshot replication traffic.  Once again drbd’s online manual has an excellent write-up on transferring metadata to its own block device.  Just read it through carefully at least twice and make sure you understand it.  It’s a high pucker-factor operation.  (Backup / snapshot are always a good idea too just in case.)
+```
+ping ip -t 不中断
